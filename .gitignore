@@ -1,0 +1,10 @@
+/* AI 工作区记忆（排查记录 / 设备信息），不入公开仓库 */
+.workbuddy/
+node_modules/
+dist/
+package.zip
+package_v*.zip
+/* test/smoke.cjs 是测试源文件，需要入库；这里只忽略 esbuild 的打包产物 */
+test/.engine.cjs
+/* 修改前快照（scripts/backup.cjs 生成），不入库 */
+_backup/
