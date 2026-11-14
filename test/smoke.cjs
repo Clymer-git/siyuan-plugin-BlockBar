@@ -1109,9 +1109,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         check("配置保存写入 version，供后续迁移判断",
             v1.includes("version: PLUGIN_VERSION"));
         const mani = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../plugin.json"), "utf8"));
-        check("清单作者地址为仓库地址、版本为 1.0.0",
+        check("清单作者地址为仓库地址、版本为 1.0.1",
             mani.url === "https://github.com/Clymer-git/siyuan-plugin-BlockBar" &&
-            mani.version === "1.0.0");
+            mani.version === "1.0.1");
         // 集市检查规则：backends/frontends 若含 "all" 则不能再混入具体值
         const mixedAll = ["kernels", "backends", "frontends"].filter((k) =>
             Array.isArray(mani[k]) && mani[k].includes("all") && mani[k].length > 1);
