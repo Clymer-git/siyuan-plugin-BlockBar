@@ -4,27 +4,11 @@
   "url": "https://github.com/Clymer-git/siyuan-plugin-BlockBar",
   "version": "1.0.0",
   "minAppVersion": "3.8.4",
-  "kernels": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
-  ],
   "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
+    "all"
   ],
   "frontends": [
-    "mobile",
-    "browser-mobile"
+    "mobile"
   ],
   "disabledInPublish": false,
   "publish": {
