@@ -1,0 +1,65 @@
+{
+  "name": "siyuan-plugin-BlockBar",
+  "author": "Clymer-git",
+  "url": "https://github.com/Clymer-git",
+  "version": "1.0.0",
+  "minAppVersion": "3.8.4",
+  "kernels": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker",
+    "all"
+  ],
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker",
+    "all"
+  ],
+  "frontends": [
+    "desktop",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile",
+    "desktop-window",
+    "all"
+  ],
+  "disabledInPublish": false,
+  "publish": {
+    "resources": [],
+    "data": []
+  },
+  "displayName": {
+    "default": "BlockBar·Bolt",
+    "zh-CN": "块捷坞·兔脱"
+  },
+  "description": {
+    "default": "A customizable quick toolbar docked above SiYuan's mobile keyboard toolbar: headings, lists, inserts, quotes, tables, blocks, styles, formulas and diagrams, with reorderable buttons and panels",
+    "zh-CN": "在思源移动端键盘工具条上方叠加一排可自定义的快捷工具栏：标题、列表、插入、引述、表格、块、样式、公式、图表，按钮与面板均可自由增删排序"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh-CN": "README.zh-CN.md"
+  },
+  "icon": "icon.png",
+  "preview": "preview.jpg",
+  "funding": {
+    "custom": []
+  },
+  "keywords": [
+    "移动端",
+    "工具条",
+    "快捷输入",
+    "mobile",
+    "toolbar",
+    "keyboard"
+  ]
+}

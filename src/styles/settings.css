@@ -1,0 +1,942 @@
+/* 移动端快捷工具条 —— 自定义按钮设置（v0.4.3，移动优先 / 轻量列表）
+   全部走思源主题变量，日/夜自动跟随；选择器统一加 sy-mb-set 前缀避免污染全局。
+   设计基调：单列铺满、分隔线代替卡片边框、大点区、拖拽排序，贴合手机操作习惯。
+   关键：面板内所有元素 max-width:100% + border-box，任何子项都不会把宽度撑出屏幕。 */
+
+.sy-mb-set,
+.sy-mb-set * {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.sy-mb-set {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    /* v0.8.19：overflow-x 用 clip 而不是 hidden —— hidden 会让本元素成为滚动容器
+       （overflow-y:visible 按规范补算为 auto），子孙的 position:sticky 会改相对
+       本容器而永远吸不住（预览吸顶静默失效）。clip 同样裁掉横向溢出但不产生
+       滚动容器；不支持的旧浏览器忽略该声明、退回 hidden，只是吸顶失效，不会更坏。 */
+    overflow-x: clip;
+    color: var(--b3-theme-on-background);
+    -webkit-text-size-adjust: 100%;
+}
+
+/* --------------------------------------------------------- 工具条实时预览 */
+/* v0.8.21：吸顶头 = 预览 + 统计行（提示语行）合成一块，一起固定在顶部。
+   为什么必须包一层 —— 两块各自吸顶的话，第二块要算第一块的高度才能接排，
+   直接包一层让浏览器当成一个元素处理，永远不会有错位。
+   （类名不是 __head —— 那是按钮卡片的头部行。） */
+.sy-mb-set__stick {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    /* v0.8.53：margin-top 归零——原来 2px 留白不在 sticky 盒内，
+       滚动时会先于预览上移、形成「吸顶头上方的空白被推上去」的观感。
+       现在吸顶头紧贴滚动区顶部，整块一起冻结。下边距由内层 padding 承担。 */
+    margin: 0;
+    background: var(--b3-theme-background);
+}
+/* v0.8.8：标题下方、统计行上方的「工具条预览」。
+   刻意让预览条复用引擎的 .sy-mb-btn 按钮样式（而不是抄一份近似样式），
+   这样按钮的大小、留白、图标形状与编辑器里真实工具条上的按钮逐项一致；
+   容器本身用 .sy-mb-set__pv-bar 另起一名（绝不叫 #syMobileToolbar，
+   否则会继承 position:fixed 跑到屏幕上去，还劫持真实工具条的 CSS 变量）。 */
+.sy-mb-set__pv {
+    padding: 8px 0 6px;
+    /* v0.8.11：容器不再画下边框 —— 预览条本体自带下边框（对齐真实键盘工具条），
+       外层再画一条就成了相距 6px 的双分割线；删掉容器这条，预览条下边框即分隔线 */
+}
+.sy-mb-set__pv-cap {
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: .55;
+    padding: 0 4px 6px;
+}
+/* 条本体：外观对齐官方 .keyboard（背景 / 上边框 / 48px 高 / 横向可滚动）。
+   v0.8.17：末尾「设置入口」齿轮就是滚动流里最后一个普通按钮（与真实工具条一致：
+   一同等分、一同横滑、滑到末端才看到），故预览条恢复单容器滚动。 */
+.sy-mb-set__pv-bar {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    height: 48px;
+    padding: 0 max(4px, env(safe-area-inset-left, 0px)) 0 max(4px, env(safe-area-inset-right, 0px));
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* 预览用手势交给浏览器原生滚动，故这里不写 touch-action:none（真实工具条才需要）。
+       v0.8.60：overscroll-behavior-x 由 contain 改 none —— 关掉原生端点反弹，
+       改由 JS 的 --sy-mb-rubber 边缘橡皮筋接管（与编辑器真实工具条一致），避免双弹。 */
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    background: var(--b3-theme-background);
+    border-top: 1px solid var(--b3-theme-surface-lighter, var(--b3-border-color));
+    border-bottom: 1px solid var(--b3-theme-surface-lighter, var(--b3-border-color));
+    color: var(--b3-theme-on-surface, var(--b3-theme-on-background, #333));
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    /* 预览在设置页内部，只需圈定自身样式失效范围，别波及编辑器 */
+    contain: layout style;
+}
+.sy-mb-set__pv-bar::-webkit-scrollbar { display: none; }
+
+/* 溢出渐隐：与真实工具条同一套类名与判定（左右分开，停在端点时不淡出） */
+.sy-mb-set__pv-bar.sy-mb-scroll-r {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+            mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent 100%);
+}
+.sy-mb-set__pv-bar.sy-mb-scroll-l {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 100%);
+}
+.sy-mb-set__pv-bar.sy-mb-scroll-l.sy-mb-scroll-r {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+
+/* 预览按钮：只是「画面」，不可点也不该有按压态；等分基准由 JS 写 --sy-mb-visible */
+.sy-mb-set__pv-btn {
+    flex: 0 0 calc(100% / var(--sy-mb-visible, 9));
+    min-width: 0;
+    height: 48px;
+    pointer-events: none;
+    opacity: 1;
+    cursor: default;
+}
+/* v0.8.60：预览条边缘橡皮筋收尾过渡（与编辑器 .sy-mb-rubber-out 同曲线）。
+   引擎的过渡写死在 #syMobileToolbar 下，预览条不在其内，这里补一条等价规则，
+   让 setProperty("--sy-mb-rubber","") 后按钮平滑归位（按钮本就带 translateX(var(--sy-mb-rubber,0px))）。 */
+.sy-mb-set__pv-bar.sy-mb-rubber-out .sy-mb-btn {
+    transition: transform .42s cubic-bezier(.32, .72, 0, 1);
+}
+/* 空态：仍保留一条真实的空工具条轮廓（48px 高不塌陷），提示文案在下方 hint 里 */
+.sy-mb-set__pv--empty .sy-mb-set__pv-bar {
+    opacity: .5;
+}
+
+/* v0.8.16：工具栏末尾「设置入口」开关行（预览提示行下方、添加按钮上方） */
+.sy-mb-set__entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 2px;
+    padding: 8px 4px;
+}
+.sy-mb-set__entry-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.sy-mb-set__entry-name {
+    font-size: 13px;
+    line-height: 1.5;
+}
+.sy-mb-set__entry-tip {
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: .5;
+    margin-top: 2px;
+}
+.sy-mb-set__entry .sy-mb-set__switch {
+    flex: 0 0 auto;
+}
+/* 块插入诊断：完整日志可在弹窗内查看，也可一键复制 / 清空 */
+.sy-mb-diag {
+    margin-top: 10px;
+    padding-top: 6px;
+    border-top: 1px solid var(--b3-border-color);
+}
+.sy-mb-diag__actions {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+}
+.sy-mb-diag__actions .b3-button {
+    flex: 1 1 0;
+    min-height: 36px;
+}
+.sy-mb-diag__status {
+    padding: 5px 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--b3-theme-on-surface);
+    opacity: .65;
+}
+.sy-mb-diag__log {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 180px;
+    max-height: 34vh;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--b3-border-radius);
+    background: var(--b3-theme-surface);
+    color: var(--b3-theme-on-surface);
+    font: 11px/1.55 var(--b3-font-family-code);
+    white-space: pre;
+}
+.sy-mb-set__pv-hint {
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: .5;
+    /* v0.8.11：上方没有分割线了，紧贴预览条下边框，多给一点呼吸感 */
+    padding: 8px 4px 2px;
+}
+/* v0.8.10：统计行已说明「共 N 个 · 超出可滑动」，提示行只补统计行没说的
+   （还没选动作 / 已停用）；没有额外提醒时整行隐藏，不重复占一行 */
+.sy-mb-set__pv-hint:empty {
+    display: none;
+}
+
+/* 顶部统计行：给全局感，降低“一堆设置项”的压迫感。
+   （原「通用设置 · 图标可见上限」输入框已移除：显示上限固定 9 个） */.sy-mb-set__stat {
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: .55;
+    /* v0.8.21：底部间距由 padding 承担（本行现在属于吸顶头，margin 会漏背景） */
+    padding: 4px 4px 10px;
+    border-bottom: 1px solid var(--b3-border-color);
+}
+.sy-mb-set__desc {
+    font-size: 12px; opacity: .5; line-height: 1.5; padding: 6px 4px 10px;
+}
+
+/* v0.8.21：停靠组 = 操作栏 + 两个标签页。
+   往下滑时只有上面的「设置选项」（几个开关）被折叠隐藏；这一组滑到吸顶头下方
+   就停在那里（top = 吸顶头高度，由 JS 量好写进 --sy-mb-sticky-h），
+   标签页里的列表照常往上滚、被这块挡住。
+   v0.8.19 那套「滑到位置就 fixed 到屏幕底部」的方案已删除 —— 位置不是用户要的，
+   而且 bottom 还要额外避让弹窗底栏，白白多一层 JS 与变量。 */
+.sy-mb-set__pin {
+    position: sticky;
+    top: var(--sy-mb-sticky-h, 0px);
+    z-index: 18;
+    background: var(--b3-theme-background);
+    padding-top: 2px;
+}
+
+/* 顶部操作栏：始终单行；五个按钮全部完整显示，放不下时整体压缩、绝不横向滑动 */
+.sy-mb-set__bar {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 4px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+.sy-mb-set__bar--foot { justify-content: flex-end; }
+/* v0.8.54：右侧工具簇（恢复默认 / 导入 / 导出 / 更多设置）吃掉剩余宽度、内部等距、
+   整体右对齐；簇内按钮 flex 允许收缩，极窄屏也不折行、不出现横向滚动条。 */
+.sy-mb-set__bar-utils {
+    display: flex; align-items: center; gap: 4px;
+    flex-wrap: nowrap; justify-content: flex-end; flex: 1 1 auto; min-width: 0;
+}
+/* 操作栏按钮：略紧凑，保证五个完整显示在一行（不滚动） */
+.sy-mb-set__bar .sy-mb-set-btn { font-size: 12px; padding: 0 10px; }
+.sy-mb-set__bar-utils .sy-mb-set-btn { flex: 0 1 auto; min-width: 0; }
+/* 「更多设置」是下钻入口，用 › 提示后面还有二级页 */
+.sy-mb-set-btn--more::after { content: "\203A"; margin-left: 2px; opacity: .55; font-weight: 700; }
+
+/* v0.8.62：二级页（更多设置 / 添加按钮）动画终版 —— 仅做动画，不动界面。
+   保留原生对话框标题栏（含右上角 ✕ 关闭），不再叠加页面内导航条 / 左侧返回按钮。
+   整页右滑覆盖：作用于对话框面板 .b3-dialog__container（.sy-mb-set__push），
+   不透明地从右侧滑入盖住主设置页，左缘投影表达 Z 轴纵深；退出时整页滑回右侧后才销毁，
+   绝不透出底层 Dialog 空白背景（旧版 scale+fade 会在退出时先透出空白页再收缩，
+   即用户看到的「多出不自然层级」）。动画类名特意避开 .sy-mb-set__sub —— 那是预览列表
+   副标题样式，同名会套上半透明（opacity:.55），导致二级页整体发虚。 */
+.sy-mb-set__push {
+    display: flex; flex-direction: column;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    box-shadow: -16px 0 40px rgba(0, 0, 0, .22);
+    will-change: transform;
+    overflow: hidden;
+    animation: sy-mb-set-push-in .34s cubic-bezier(.32, .72, 0, 1) both;
+}
+.sy-mb-set__push.sy-mb-set-push--out {
+    animation: sy-mb-set-push-out .34s cubic-bezier(.32, .72, 0, 1) both;
+}
+@keyframes sy-mb-set-push-in {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+@keyframes sy-mb-set-push-out {
+    from { transform: translateX(0); }
+    to   { transform: translateX(100%); }
+}
+
+/* v0.8.63：二级页自管阴影遮罩（替代 SiYuan 自带 mask，避免退出时提前淡出造成的阴影错位）。
+   盖在主设置页之上、二级面板之下，表达「二级页浮于主页之上」的纵深；
+   v0.8.67：退出时由 JS 加 .sy-mb-set__backdrop--out 与面板滑出**同步淡出**
+   （同一条 360ms iOS 曲线），不再等动画结束后才消失，消除阴影滞后的错位感。 */
+.sy-mb-set__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .28);
+    opacity: 1;
+    pointer-events: none;
+    will-change: opacity;
+    transition: opacity .34s cubic-bezier(.32, .72, 0, 1);
+}
+.sy-mb-set__backdrop--out {
+    opacity: 0;
+}
+
+/* 二级页内容中性包裹层（不含导航条 / 返回按钮；仅作布局容器） */
+.sy-mb-set__more-page {
+    display: flex; flex-direction: column;
+    flex: 1 1 auto; min-height: 0;
+}
+/* 二级页滚动体：开关列表内部滚动（flex:1 填满 + 自带滚动） */
+.sy-mb-set__more-body {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 12px 8px 24px;
+}
+
+/* v0.8.60：移除旧的「底层缩放压暗」视差（.sy-mb-set__under）。
+   二级页改为不透明的整页右滑覆盖主设置页，纵深由左缘投影表达；底层主设置页保持
+   静止即可，不再做 scale —— 既避免 scale 露四边背景，也杜绝退出时透出空白页的假层级。 */
+
+
+/* 统一规格按钮：一级页操作栏 / 编辑页 / 各弹层的所有次级按钮共用同一套「风格」——
+   同高（40px）、同圆角（10px）、同字号（13px）、同描边；宽度随文字自适应，文字绝不竖排换行。
+   注意：类名前缀必须是 sy-mb-set-，绝不能叫 .sy-mb-btn —— 那是工具条按钮的类名，
+   两个样式表会打进同一个 index.css 且本表在前者之后，会把工具条按钮染成设置页按钮的
+   灰底 + 描边 + 10px 圆角，破坏「与系统键盘工具条一致」的外观。 */
+.sy-mb-set-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
+    min-height: 40px; padding: 0 12px;
+    border: 1px solid var(--b3-border-color); border-radius: 10px;
+    background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+    font-size: 13px; font-weight: 500; line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-btn:active { background: var(--b3-list-hover, var(--b3-theme-surface)); }
+.sy-mb-set-btn--block { display: flex; width: 100%; }
+/* 主操作（保存 / 完成）：实心主题色 */
+.sy-mb-set-btn--primary {
+    border-color: transparent;
+    background: var(--b3-theme-primary, var(--b3-theme-blue));
+    color: var(--b3-theme-on-primary, #fff);
+    font-weight: 600;
+}
+.sy-mb-set-btn--primary:active {
+    background: var(--b3-theme-primary, var(--b3-theme-blue));
+    filter: brightness(.94);
+}
+/* 危险操作（删除）：描边 + 红字，与主操作区分 */
+.sy-mb-set-btn--danger {
+    border-color: color-mix(in srgb, var(--b3-theme-error, #d23f3f) 40%, transparent);
+    background: transparent;
+    color: var(--b3-theme-error, #d23f3f);
+}
+.sy-mb-set-btn--danger:active {
+    background: color-mix(in srgb, var(--b3-theme-error, #d23f3f) 12%, transparent);
+}
+
+/* 列表 */
+.sy-mb-set__list { display: flex; flex-direction: column; }
+.sy-mb-set__empty {
+    padding: 28px 12px; text-align: center; font-size: 13px; opacity: .6;
+    border: 1px dashed var(--b3-border-color); border-radius: 10px; margin: 8px 4px;
+}
+.sy-mb-set__empty--mini { padding: 12px; font-size: 12px; opacity: .6; text-align: center; }
+
+/* 单项：分隔线代替边框，视觉更轻 */
+.sy-mb-set__item {
+    border-bottom: 1px solid var(--b3-border-color);
+    background: transparent;
+    transition: background .12s ease;
+}
+.sy-mb-set__item--off { opacity: .45; }
+.sy-mb-set__item--drag {
+    position: relative;
+    background: var(--b3-theme-surface);
+    box-shadow: 0 6px 20px rgba(0,0,0,.28);
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    z-index: 30;
+    /* v0.8.67：拖拽跟手靠 transform，提前提合成层，避免每帧重绘掉帧 */
+    will-change: transform;
+    transition: none;
+}
+/* 拖拽期间：禁掉整页文字选择与长按菜单，手指动作只服务于排序 */
+body.sy-mb-set--dragging {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+.sy-mb-set__item--child {
+    background: color-mix(in srgb, var(--b3-theme-surface) 40%, var(--b3-theme-background));
+}
+
+/* 头部行：拖拽手柄 | 开关 | 图标 | 名称 | 箭头 */
+.sy-mb-set__head {
+    display: flex; align-items: center; gap: 8px;
+    min-height: 56px; padding: 6px 2px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__handle {
+    flex: 0 0 auto; width: 34px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--b3-theme-on-surface); opacity: .4;
+    cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__handle:active { opacity: .8; cursor: grabbing; }
+.sy-mb-set__item--drag .sy-mb-set__handle { opacity: .9; }
+.sy-mb-set__switch { flex-shrink: 0; }
+.sy-mb-set__icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; flex-shrink: 0; color: var(--b3-theme-on-surface);
+}
+.sy-mb-set__icon .sy-mb-icon { width: 22px; height: 22px; fill: currentColor; }
+.sy-mb-set__icon .sy-mb-glyph { font-size: 18px; line-height: 1; }
+.sy-mb-set__meta { flex: 1; min-width: 0; }
+.sy-mb-set__name {
+    font-size: 15px; line-height: 1.4; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sy-mb-set__sub {
+    font-size: 12px; line-height: 1.4; opacity: .55; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sy-mb-set__chev {
+    flex-shrink: 0; width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--b3-theme-on-surface); opacity: .55;
+    transition: transform .2s ease;
+}
+.sy-mb-set__item--open .sy-mb-set__chev { transform: rotate(180deg); }
+
+/* 编辑区：默认收起；展开后用左侧细条区分（去重色块，更轻） */
+.sy-mb-set__body {
+    padding: 4px 0 8px 12px;
+    margin: 0 0 4px;
+    border-left: 2px solid var(--b3-border-color);
+}
+.sy-mb-set__field { margin-top: 12px; }
+.sy-mb-set__label { font-size: 12px; opacity: .7; margin-bottom: 6px; }
+.sy-mb-set__icon-row { display: flex; align-items: center; gap: 8px; }
+
+/* 分段类型选择（圆角矩形，与全站按钮同一圆角体系） */
+.sy-mb-set__seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.sy-mb-set__seg-btn {
+    flex: 1 1 auto; min-width: 64px; min-height: 44px; padding: 0 12px;
+    border: 1px solid var(--b3-border-color); border-radius: 10px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    font-size: 14px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__seg-btn--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 16%, var(--b3-theme-surface));
+    color: var(--b3-theme-primary, var(--b3-theme-blue)); font-weight: 600;
+}
+
+/* 列表项右侧的删除按钮：直接删这一个按钮，不必进编辑页，也不需要「恢复默认」清空全部。
+   触控区 44px 高，颜色低调、按下才变红，避免误触也避免抢视觉。 */
+.sy-mb-set__del {
+    flex: 0 0 auto; width: 40px; height: 44px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 8px; background: transparent;
+    color: var(--b3-theme-on-surface); opacity: .5;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__del:active {
+    opacity: 1;
+    color: var(--b3-theme-error, #d23f3f);
+    background: color-mix(in srgb, var(--b3-theme-error, #d23f3f) 12%, transparent);
+}
+
+/* 导入导出 JSON */
+.sy-mb-set__json {
+    width: 100%; box-sizing: border-box;
+    font-family: var(--b3-font-family-code, monospace);
+    font-size: 12px; resize: vertical;
+}
+
+/* 图标选择器 */
+.sy-mb-set__pick { height: 100%; overflow: auto; box-sizing: border-box; padding: 6px; }
+.sy-mb-set__pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.sy-mb-set__pick-cell {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 12px 6px; border: 1px solid transparent; border-radius: 10px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__pick-cell:hover { background: var(--b3-theme-surface); }
+.sy-mb-set__pick-cell--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 14%, var(--b3-theme-surface));
+}
+.sy-mb-set__pick-cell .sy-mb-icon { width: 24px; height: 24px; fill: currentColor; }
+.sy-mb-set__pick-name { font-size: 11px; opacity: .5; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 移动端：紧凑 + 两侧留一点呼吸位（不贴边）。
+   v0.8.53：顶部留白归零——那段 6px 在吸顶头之外，滚动时会被先推上去，
+   造成「预览上方仍有空白未冻结」。现在吸顶头直接顶到滚动区顶部，整块冻结。 */
+.sy-mb-set--mobile { padding: 0 12px 16px; }
+@media (max-width: 360px) {
+    .sy-mb-set--mobile { padding: 6px 10px 16px; }
+    .sy-mb-set__head { gap: 6px; padding: 6px 0; }
+    .sy-mb-set__seg-btn { min-width: 56px; min-height: 42px; font-size: 13px; }
+    /* 窄屏：卡片右侧控件挤一点，保证名称不被压没 */
+    .sy-mb-set__del { width: 36px; }
+    .sy-mb-set__chev { width: 22px; }
+    /* 操作栏：再收一轮，确保五个按钮在 320~360 屏宽也完整显示、不横向滑动 */
+    .sy-mb-set__bar { gap: 3px; padding: 6px 2px; }
+    .sy-mb-set__bar .sy-mb-set-btn { font-size: 11px; padding: 0 7px; }
+}
+
+/* 移动端自管全屏设置对话框：头部（思源标题栏） + 唯一滚动区 + 底部固定操作栏。
+   结构全部由插件控制，页面只有一个上下滚动容器，不再有嵌套滚动与宽度挤压。 */
+.sy-mb-set-dlg {
+    height: 100%;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    /* v0.8.55：入场 —— 自底向上滑入 + 淡入（iOS 全屏模态同款），
+       与思源 Dialog 自身的淡入叠加，读起来就是「滑上来」而非「啪一下出现」。
+       v0.8.57：去掉 fill-mode:both，让稳态 transform 回到 none，
+       以便二级页推入时底层 .sy-mb-set-dlg 能被 .sy-mb-set__under 接管做视差缩放。 */
+    animation: sy-mb-set-dlg-in .34s cubic-bezier(.32, .72, 0, 1);
+}
+
+@keyframes sy-mb-set-dlg-in {
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.sy-mb-set-dlg__scroll {
+    -webkit-overflow-scrolling: touch;
+    /* v0.8.58：改为 none —— 彻底压制原生橡皮筋/回弹光晕，设置页的上下回弹完全交给
+       我们自己的视觉 transform；否则原生与自定义两套会叠加，长列表滚动也更易掉帧。 */
+    overscroll-behavior: none;
+}
+.sy-mb-set-dlg__foot {
+    display: flex;
+    gap: 10px;
+    padding: 10px 14px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--b3-border-color);
+    background: var(--b3-theme-background);
+}
+/* 底部固定栏：一级页（取消/保存）与编辑页（删除/完成）共用同一套按钮规格 */
+.sy-mb-set-dlg__foot .sy-mb-set-btn { flex: 1; min-height: 44px; }
+.sy-mb-set-dlg__foot .sy-mb-set-btn--primary { flex: 2; }
+
+/* ------------------------------------------------------------------ v0.5 */
+/* 单按钮编辑页：顶部（图标+名称）一行 + 唯一滚动区 + 底部固定操作栏 */
+/* 编辑页内部统一 border-box（防止 width:100% + padding 撑破容器），但必须排除图标本身：
+   图标在工具条里是 content-box + 11px 7px padding，一旦被改成 border-box，
+   padding 会吃掉整个 28px 盒子，图标被压成一条缝（几乎看不见）。 */
+.sy-mb-set-editor *:not(.sy-mb-icon):not(.sy-mb-glyph) {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+/* 图标：设置页里一律 content-box 且清零工具条的 11px/7px 触控留白，
+   分成三段是因为图标分别出现在 .sy-mb-set（列表）/ 编辑页 / 选择器弹层里 */
+.sy-mb-set .sy-mb-icon, .sy-mb-set .sy-mb-glyph,
+.sy-mb-set-editor .sy-mb-icon, .sy-mb-set-editor .sy-mb-glyph,
+.sy-mb-set__pick .sy-mb-icon, .sy-mb-set__pick .sy-mb-glyph {
+    box-sizing: content-box;
+    padding: 0;
+    margin: 0;
+}
+/* 「样式」按钮（icon: "style:info" 等）的内部色块 A：
+   与工具条同一套 --b3-card-* 配色，但在设置页里不能继承工具条那 20px 大内边距，
+   也不能被上面 `*:not(...)` 的 max-width 压扁，这里显式定死尺寸。 */
+.sy-mb-set .sy-mb-glyph--style, .sy-mb-set-editor .sy-mb-glyph--style, .sy-mb-set__pick .sy-mb-glyph--style {
+    box-sizing: content-box;
+    width: 20px; height: 20px; padding: 0; margin: 0;
+    background: transparent;
+}
+.sy-mb-set .sy-mb-glyph-a, .sy-mb-set-editor .sy-mb-glyph-a, .sy-mb-set__pick .sy-mb-glyph-a {
+    box-sizing: border-box; flex: 0 0 auto;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 5px; font-size: 13px; font-style: normal; font-weight: 700; line-height: 1;
+}
+.sy-mb-set-editor {
+    box-sizing: border-box;
+    display: flex; flex-direction: column;
+    flex: 1 1 auto; min-height: 0; width: 100%;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+}
+/* 编辑页头部：图标 + 名称合并成一行。整块用页面底色（区别于顶部标题栏的 surface），
+   图标是可点的方块按钮、名称是有边框底色的输入框，一眼看得出都能改。 */
+.sy-mb-set-editor__pv {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--b3-border-color);
+    background: var(--b3-theme-background);
+}
+.sy-mb-set-editor__pv-main { display: flex; align-items: center; gap: 12px; }
+.sy-mb-set-editor__pv-icon {
+    flex: 0 0 auto; width: 48px; height: 48px; border-radius: 10px; padding: 0;
+    box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 40%, var(--b3-border-color));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 8%, var(--b3-theme-surface));
+    color: var(--b3-theme-on-background);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-editor__pv-icon:active { background: var(--b3-list-hover, var(--b3-theme-surface)); }
+.sy-mb-set-editor__pv-icon .sy-mb-icon { width: 28px; height: 28px; fill: currentColor; }
+.sy-mb-set-editor__pv-icon .sy-mb-glyph { font-size: 24px; line-height: 1; }
+.sy-mb-set-editor__pv-text { flex: 1; min-width: 0; }
+/* 名称：保留明确的矩形输入框（描边 + 底色 + 内边距），高度与图标块一致（48px）严格对齐 */
+.sy-mb-set-editor__pv-name {
+    display: block; width: 100%; height: 48px; padding: 0 12px; margin: 0;
+    border: 1px solid var(--b3-border-color); border-radius: 8px;
+    background: var(--b3-theme-surface); outline: none;
+    color: var(--b3-theme-on-background); font-family: inherit;
+    font-size: 16px; font-weight: 600; line-height: 1.3;
+    box-sizing: border-box;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.sy-mb-set-editor__pv-name::placeholder { color: inherit; opacity: .4; }
+.sy-mb-set-editor__pv-name:focus { border-color: var(--b3-theme-primary, var(--b3-theme-blue)); }
+.sy-mb-set-editor__pv-hint { font-size: 11.5px; line-height: 1.5; opacity: .5; }
+.sy-mb-set-editor__scroll {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+}
+.sy-mb-set-editor__form { padding: 14px 16px 20px; }
+
+.sy-mb-set-ed__row { margin-bottom: 18px; }
+.sy-mb-set-ed__label { font-size: 12px; opacity: .65; margin-bottom: 8px; }
+.sy-mb-set-ed__input, .sy-mb-set-ed__area { width: 100%; min-height: 44px; }
+.sy-mb-set-ed__area { resize: vertical; }
+.sy-mb-set-ed__hint { font-size: 11px; opacity: .45; line-height: 1.5; margin-top: 6px; }
+
+/* 类型卡片：一行排满（列数由 JS 按选项数量设定：顶层 5 列 / 子按钮 4 列），
+   卡内只留「图形 + 名称」，绝不折行留下空位；行为说明统一收进卡片下方一行。 */
+.sy-mb-set-ed__types { display: grid; gap: 6px; }
+.sy-mb-set-ed__type {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    min-height: 64px; padding: 10px 2px;
+    border: 1px solid var(--b3-border-color); border-radius: 10px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-ed__type-ic { display: flex; align-items: center; justify-content: center; opacity: .85; }
+.sy-mb-set-ed__type-ic svg { width: 18px; height: 18px; }
+.sy-mb-set-ed__type-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.sy-mb-set-ed__type.sy-mb-set__seg-btn--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 14%, var(--b3-theme-surface));
+    color: var(--b3-theme-primary, var(--b3-theme-blue));
+}
+.sy-mb-set-ed__type-caption { font-size: 11.5px; opacity: .5; line-height: 1.5; margin-top: 8px; }
+@media (max-width: 360px) {
+    .sy-mb-set-ed__type { padding: 8px 1px; min-height: 60px; }
+    .sy-mb-set-ed__type-name { font-size: 11.5px; }
+}
+
+/* 动作选择：大按钮，点开是图标网格 */
+.sy-mb-set-ed__action {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    min-height: 52px; padding: 8px 12px; text-align: left;
+    border: 1px solid var(--b3-border-color); border-radius: 10px;
+    background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-ed__action-ic { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 26px; }
+.sy-mb-set-ed__action-ic .sy-mb-icon { width: 22px; height: 22px; fill: currentColor; }
+.sy-mb-set-ed__action-name {
+    flex: 1; min-width: 0; font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sy-mb-set-ed__action-more { flex: 0 0 auto; opacity: .5; font-size: 16px; }
+
+/* 待选态（v0.8.9）：新建按钮默认还没选动作，这一栏显示「点击选择动作」而不是某个动作名。
+   视觉上要和「已选好」明确区分 —— 虚线描边 + 无底色 + 浅色文字 + 一个虚线小方块占位，
+   一眼看出「这里还空着，点我」。不用醒目色，避免和「已配置」的实心按钮抢注意力。 */
+.sy-mb-set-ed__action--empty {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--b3-theme-on-surface, #333) 28%, transparent);
+    background: transparent;
+}
+.sy-mb-set-ed__action-name--empty {
+    color: var(--b3-theme-on-surface, #333);
+    opacity: .5;
+    font-weight: 400;
+}
+/* 空图标位：22px 的虚线圆角方块（与真实图标的占位尺寸一致，不让整行左右跳） */
+.sy-mb-set-ed__action-ic--empty {
+    width: 22px; height: 22px;
+    border: 1px dashed color-mix(in srgb, var(--b3-theme-on-surface, #333) 30%, transparent);
+    border-radius: 5px;
+}
+
+/* 面板子项：**行内直改** —— 一行就是编辑器，点行不再进「子编辑页」。
+   底色沿用「面板底 = surface / 条目 = background」这套与真实面板一致的对比关系。 */
+.sy-mb-set-ed__kids { display: flex; flex-direction: column; gap: 10px; }
+.sy-mb-set__kids {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 6px 8px 8px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 10px;
+    background: var(--b3-theme-surface);
+}
+
+/* 一行 = [手柄][图标][名称][行为][⋯]；行下可就地展开「这一行的设置」 */
+.sy-mb-set__kid {
+    display: flex; flex-direction: column;
+    border-radius: var(--b3-border-radius, 4px);
+    background: var(--b3-theme-background);
+    box-shadow: inset 0 0 0 1px var(--b3-border-color);
+    color: var(--b3-theme-on-background);
+    font-size: 13.5px;
+    -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid--off { opacity: .45; }
+.sy-mb-set__kid--open { box-shadow: inset 0 0 0 1px var(--b3-theme-primary, var(--b3-border-color)); }
+.sy-mb-set__kid.sy-mb-set__item--drag { opacity: .9; }
+.sy-mb-set__kid-row { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 4px 0 2px; }
+
+.sy-mb-set__kid-drag {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 40px; opacity: .35; cursor: grab;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid-drag:active { opacity: .7; cursor: grabbing; }
+
+.sy-mb-set__kid-ic {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    box-sizing: content-box; width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 7px; background: transparent; color: inherit; overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid-ic:active { background: var(--b3-list-hover, var(--b3-theme-surface)); }
+.sy-mb-set__kid-ic .sy-mb-icon { width: 20px; height: 20px; padding: 0; margin: 0; fill: currentColor; }
+.sy-mb-set__kid-ic .sy-mb-glyph { font-size: 16px; line-height: 1; }
+.sy-mb-set__kid-ic .sy-mb-glyph--style { width: 20px; height: 20px; }
+
+.sy-mb-set__kid-name {
+    flex: 1 1 auto; min-width: 0; height: 36px; padding: 0 8px;
+    border: 1px solid transparent; border-radius: 7px;
+    background: transparent; color: inherit; font-family: inherit; font-size: 13.5px;
+    box-sizing: border-box; outline: none;
+}
+.sy-mb-set__kid-name::placeholder { color: inherit; opacity: .38; }
+.sy-mb-set__kid-name:focus { border-color: var(--b3-theme-primary, var(--b3-theme-blue)); }
+
+.sy-mb-set__kid-act {
+    flex: 0 1 auto; min-width: 0; max-width: 40%; height: 36px; padding: 0 8px;
+    border: 1px solid var(--b3-border-color); border-radius: 7px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    font-family: inherit; font-size: 12.5px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid-act:active { background: var(--b3-list-hover, var(--b3-theme-surface)); }
+
+/* 官方动作行（v0.8.6）：复用顶层「内置动作」大按钮 sy-mb-set-ed__action，
+   只是嵌进子项行 —— 收窄内边距、去掉自带边框底色，图标与名字跟随动作。
+   顶层与子项同一套外观，正是「设置界面统一」的落点。 */
+.sy-mb-set__kid-main {
+    flex: 1 1 auto; min-width: 0; width: auto;
+    padding: 6px 8px 6px 4px; border: 0; background: transparent;
+}
+
+.sy-mb-set__kid-more {
+    flex: 0 0 auto; width: 30px; height: 36px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 7px; background: transparent; color: inherit; opacity: .45;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid-more:active { opacity: .85; background: var(--b3-list-hover, var(--b3-theme-surface)); }
+
+/* 行下展开的「这一行的设置」 */
+.sy-mb-set__kid-ed { padding: 2px 10px 12px; border-top: 1px solid var(--b3-border-color); }
+.sy-mb-set__kid-ed .sy-mb-set-ed__row { margin-bottom: 12px; }
+.sy-mb-set__kid-ed .sy-mb-set__field { margin-bottom: 12px; }
+.sy-mb-set__kid-ed__types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.sy-mb-set__kid-ed__type {
+    min-height: 38px; padding: 0 4px; font-size: 12.5px;
+    border: 1px solid var(--b3-border-color); border-radius: 8px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set__kid-ed__type.sy-mb-set__seg-btn--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 14%, var(--b3-theme-surface));
+    color: var(--b3-theme-primary, var(--b3-theme-blue));
+}
+.sy-mb-set__kid-ed__param:empty { display: none; }
+.sy-mb-set-ed__delbtn {
+    width: 100%; min-height: 40px; padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--b3-theme-error, #d23f31) 40%, transparent);
+    border-radius: 8px; background: transparent;
+    color: var(--b3-theme-error, #d23f31); font-family: inherit; font-size: 13px; cursor: pointer;
+}
+
+/* 快捷短语选项：一行一条，不再用多行文本猜格式 */
+.sy-mb-set-ed__opts { display: flex; flex-direction: column; gap: 8px; }
+.sy-mb-set-ed__opt { display: flex; align-items: center; gap: 6px; }
+.sy-mb-set-ed__opt-name { flex: 0 0 34%; min-width: 0; min-height: 44px; }
+.sy-mb-set-ed__opt-value { flex: 1 1 auto; min-width: 0; min-height: 44px; }
+.sy-mb-set-ed__opt-del {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--b3-border-color); background: transparent;
+    color: inherit; opacity: .6; cursor: pointer;
+}
+.sy-mb-set-ed__opt-add { width: 100%; }
+
+/* 更多：低频字段默认折叠 */
+.sy-mb-set-ed__more-head {
+    width: 100%; min-height: 44px; padding: 0 4px; text-align: left;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--b3-theme-primary, var(--b3-theme-blue)); font-size: 13px;
+}
+.sy-mb-set-ed__more-body { padding-top: 4px; }
+
+/* 动作库网格 */
+.sy-mb-set__pick-title { font-size: 12px; opacity: .6; padding: 10px 4px 6px; }
+.sy-mb-set__pick-ic { display: flex; align-items: center; justify-content: center; }
+.sy-mb-set__pick-ic .sy-mb-icon { width: 24px; height: 24px; fill: currentColor; }
+
+/* ---------------------------------------------------------------- 兜底
+   线性兜底图标（思源 litheness 里没有对应 symbol 的那几项：页签 / 思维导图 /
+   日期时间，以及 symbol 尚未注入的瞬间）在设置页也必须保持「只描边、不填充」。
+   上面若干 .sy-mb-icon { fill: currentColor } 的特异度（0,2,0）会按 CSS 优先级
+   压掉 .sy-mb-icon--line { fill: none }（0,1,0），图标会糊成实心色块。
+   这一段放文件末尾，保证在任何宿主（列表 / 编辑页 / 图标选择器 / 动作库网格）
+   里都赢。 */
+.sy-mb-set .sy-mb-icon--line,
+.sy-mb-set-editor .sy-mb-icon--line,
+.sy-mb-set__pick .sy-mb-icon--line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 图标选择器里的格子：图标统一 24px 见方，样式色块跟着缩到 20px 并居中 */
+.sy-mb-set__pick-cell .sy-mb-glyph { display: flex; align-items: center; justify-content: center; }
+.sy-mb-set__pick-cell .sy-mb-glyph--style { width: 20px; height: 20px; }
+
+/* ------------------------------------------------- 选择器抽屉（v0.5.2）
+   图标 / 动作选择器不再是独立弹窗，而是编辑弹窗内从底部滑入的一张浮层：
+   编辑弹窗始终只有一层，选择器只是它内部的一张抽屉，不再产生「弹窗套弹窗」。 */
+.sy-mb-set-drawer { position: absolute; inset: 0; z-index: 40; }
+.sy-mb-set-drawer__scrim {
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, .32);
+    animation: sy-mb-drawer-fade .16s ease-out;
+}
+.sy-mb-set-drawer__sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 78%;
+    display: flex; flex-direction: column;
+    border-radius: 14px 14px 0 0;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, .28);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    animation: sy-mb-drawer-up .18s ease-out;
+}
+@keyframes sy-mb-drawer-up { from { transform: translateY(14%); } to { transform: translateY(0); } }
+@keyframes sy-mb-drawer-fade { from { opacity: 0; } to { opacity: 1; } }
+.sy-mb-set-drawer__head {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 8px;
+    min-height: 50px; padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--b3-border-color);
+}
+.sy-mb-set-drawer__title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; }
+.sy-mb-set-drawer__close {
+    flex: 0 0 auto; width: 40px; height: 40px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 8px; background: transparent;
+    color: inherit; opacity: .6; font-size: 15px; line-height: 1;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-drawer__close:active { opacity: 1; background: var(--b3-list-hover, var(--b3-theme-surface)); }
+.sy-mb-set-drawer__body {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+/* 抽屉内的网格自己滚动（.sy-mb-set__pick 本就 height:100% + overflow:auto） */
+.sy-mb-set-drawer__body > .sy-mb-set__pick { flex: 1 1 auto; min-height: 0; }
+
+/* --------------------------------------------------- 形态开关（v0.8.0）
+   面板是「容器」，层级高于动作 / 快捷短语两种行为，所以它不再挤进那排
+   二等分的类型卡，而是单独一行、单独一个开关（见 settings.ts 的 modeRow）。 */
+.sy-mb-set-ed__mode {
+    box-sizing: border-box;
+    display: flex; align-items: center; gap: 10px;
+    min-height: 58px; padding: 10px 12px;
+    border: 1px solid var(--b3-border-color); border-radius: 10px;
+    background: var(--b3-theme-surface); color: var(--b3-theme-on-surface);
+}
+.sy-mb-set-ed__mode--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 12%, var(--b3-theme-surface));
+    color: var(--b3-theme-primary, var(--b3-theme-blue));
+}
+.sy-mb-set-ed__mode-ic {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 22px;
+}
+.sy-mb-set-ed__mode-ic svg { width: 20px; height: 20px; }
+.sy-mb-set-ed__mode-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sy-mb-set-ed__mode-name { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.sy-mb-set-ed__mode-desc { font-size: 11.5px; opacity: .6; line-height: 1.4; }
+.sy-mb-set-ed__mode-switch { flex: 0 0 auto; }
+
+/* ------------------------------------------- 「添加子项」选择器的两个分页（v0.8.0）
+   动作 / 快捷短语 —— 面板里想放什么子项，直接在这里切页选，
+   不必先加一个动作、再进「⋯」把类型改掉。 */
+.sy-mb-set-tabs {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    display: flex; gap: 6px; padding: 10px 12px;
+    border-bottom: 1px solid var(--b3-border-color);
+}
+.sy-mb-set-tab {
+    box-sizing: border-box;
+    flex: 1 1 0; min-width: 0; height: 38px; padding: 0 6px;
+    border: 1px solid var(--b3-border-color); border-radius: 9px;
+    background: transparent; color: var(--b3-theme-on-surface);
+    font-family: inherit; font-size: 13px; white-space: nowrap;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.sy-mb-set-tab:active { background: var(--b3-list-hover, var(--b3-theme-surface)); }
+.sy-mb-set-tab--on {
+    border-color: var(--b3-theme-primary, var(--b3-theme-blue));
+    background: color-mix(in srgb, var(--b3-theme-primary, #4a90d2) 14%, var(--b3-theme-surface));
+    color: var(--b3-theme-primary, var(--b3-theme-blue)); font-weight: 600;
+}
+.sy-mb-set-tabpane {
+    box-sizing: border-box;
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.sy-mb-set-tabpane > .sy-mb-set__pick { flex: 1 1 auto; min-height: 0; }
+.sy-mb-set-tabform {
+    box-sizing: border-box;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column;
+    padding: 14px 16px 16px;
+}
+.sy-mb-set-tabform__foot { margin-top: auto; padding-top: 14px; }
+
+/* v0.8.55：减少动态偏好 —— 设置页 / 二级页的入场改为极轻淡入（去掉位移），
+   保留「出现」的提示但不引发晕动；时长压到下限附近。 */
+@media (prefers-reduced-motion: reduce) {
+    .sy-mb-set-dlg { animation: sy-mb-set-dlg-fade .14s ease both; }
+    .sy-mb-set__push { animation: sy-mb-set-push-fade .14s ease both; }
+    .sy-mb-set__push.sy-mb-set-push--out { animation: sy-mb-set-push-fade-out .14s ease both; }
+}
+@keyframes sy-mb-set-dlg-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sy-mb-set-push-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sy-mb-set-push-fade-out { from { opacity: 1; } to { opacity: 0; } }
