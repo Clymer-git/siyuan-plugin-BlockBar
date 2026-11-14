@@ -1108,10 +1108,18 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
             /prevVersion\.startsWith\("0\."\)[\s\S]{0,120}insertDiagnostics = false;[\s\S]{0,80}perfDiagnostics = false;/.test(v1));
         check("配置保存写入 version，供后续迁移判断",
             v1.includes("version: PLUGIN_VERSION"));
-        check("清单作者地址为作者主页、版本为 1.0.0",
-            JSON.parse(fs.readFileSync(path.resolve(__dirname, "../plugin.json"), "utf8")).url ===
-                "https://github.com/Clymer-git" &&
-            JSON.parse(fs.readFileSync(path.resolve(__dirname, "../plugin.json"), "utf8")).version === "1.0.0");
+        const mani = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../plugin.json"), "utf8"));
+        check("清单作者地址为仓库地址、版本为 1.0.0",
+            mani.url === "https://github.com/Clymer-git/siyuan-plugin-BlockBar" &&
+            mani.version === "1.0.0");
+        // 集市检查规则：kernels/backends/frontends 若含 "all" 则不能再混入具体值
+        const mixedAll = ["kernels", "backends", "frontends"].filter((k) =>
+            Array.isArray(mani[k]) && mani[k].includes("all") && mani[k].length > 1);
+        check("清单平台字段不与 all 混用",
+            mixedAll.length === 0);
+        // 插件只面向移动端：frontends 仅保留移动端前端
+        check("清单前端限定为移动端",
+            JSON.stringify(mani.frontends) === JSON.stringify(["mobile", "browser-mobile"]));
     }
 
     console.log("[settings entry]");

@@ -1,7 +1,7 @@
 {
   "name": "siyuan-plugin-BlockBar",
   "author": "Clymer-git",
-  "url": "https://github.com/Clymer-git",
+  "url": "https://github.com/Clymer-git/siyuan-plugin-BlockBar",
   "version": "1.0.0",
   "minAppVersion": "3.8.4",
   "kernels": [
@@ -11,8 +11,7 @@
     "ios",
     "android",
     "harmony",
-    "docker",
-    "all"
+    "docker"
   ],
   "backends": [
     "windows",
@@ -21,16 +20,11 @@
     "ios",
     "android",
     "harmony",
-    "docker",
-    "all"
+    "docker"
   ],
   "frontends": [
-    "desktop",
     "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window",
-    "all"
+    "browser-mobile"
   ],
   "disabledInPublish": false,
   "publish": {
