@@ -1123,9 +1123,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
             !Array.isArray(mani.kernels) || mani.kernels.length === 0);
         check("后端环境与系统无关，写 all",
             JSON.stringify(mani.backends) === JSON.stringify(["all"]));
-        // 插件只面向移动端应用：frontends 只保留 mobile
-        check("清单前端限定为移动应用",
-            JSON.stringify(mani.frontends) === JSON.stringify(["mobile"]));
+        // 插件面向移动端：移动应用 + 移动端浏览器
+        check("清单前端限定为移动端（应用 + 浏览器）",
+            JSON.stringify(mani.frontends) === JSON.stringify(["mobile", "browser-mobile"]));
     }
 
     console.log("[settings entry]");
